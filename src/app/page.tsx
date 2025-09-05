@@ -1,43 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import FloatingToolbar from "../components/floatingtoolbar";
+import { useState } from "react";
+import dynamic from "next/dynamic";
+import FloatingToolbar from "./components/FloatingToolbar";
+
+// Dynamically import TipTap editor (client-side only)
+const TiptapEditor = dynamic(() => import("./components/Editor"), { ssr: false });
 
 export default function Home() {
-  const [isMounted, setIsMounted] = useState(false);
   const [messages, setMessages] = useState<{ sender: string; text: string; type?: string }[]>([]);
   const [input, setInput] = useState("");
+  const [editor, setEditor] = useState<any>(null);
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  const editor = useEditor({
-    extensions: [StarterKit],
-    content: "<p>Start writing here...</p>",
-    immediatelyRender: false,
-  });
-
-  // AI edit handler (used by floating toolbar)
-  const handleEditWithAI = async (prompt: string): Promise<string> => {
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: prompt }),
-      });
-
-      const data = await res.json();
-      return data.reply;
-    } catch (error) {
-      console.error("AI edit error:", error);
-      return prompt;
-    }
-  };
-
-  // Chat + Web Search handler
+  // Send message handler
   const sendMessage = async () => {
     if (!input.trim()) return;
 
@@ -51,89 +26,101 @@ export default function Home() {
         userMessage.toLowerCase().includes("find") ||
         userMessage.toLowerCase().includes("search")
       ) {
-        const res = await fetch("/api/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: userMessage }),
-        });
+        try {
+          const res = await fetch("/api/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: userMessage }),
+          });
 
-        const data = await res.json();
+          const data = await res.json();
+          console.log("🔎 Search API response:", data);
 
-        // Show in chat with label
-        setMessages((prev) => [
-          ...prev,
-          { sender: "ai", text: `🔎 Web Search Result: ${data.result}`, type: "search" },
-        ]);
+          setMessages((prev) => [
+            ...prev,
+            { sender: "ai", text: `🔎 Web Search Result: ${data.result}`, type: "search" },
+          ]);
 
-        // Insert into editor
-        editor?.commands.insertContent(
-          `<p><strong>🔎 Web Search Result:</strong> ${data.result}</p>`
-        );
+          // Insert into editor
+          editor?.commands.insertContent(
+            `<p><strong>🔎 Web Search Result:</strong> ${data.result}</p>`
+          );
+        } catch (err) {
+          console.error("❌ Search API error:", err);
+          setMessages((prev) => [
+            ...prev,
+            { sender: "ai", text: "⚠️ Search API error: could not fetch results" },
+          ]);
+        }
       } else {
         // Normal AI chat
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: userMessage }),
-        });
+        try {
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: userMessage }),
+          });
 
-        const data = await res.json();
-        setMessages((prev) => [...prev, { sender: "ai", text: data.reply, type: "chat" }]);
+          const data = await res.json();
+          console.log("🤖 AI API response:", data);
+
+          setMessages((prev) => [
+            ...prev,
+            { sender: "ai", text: data.reply || "⚠️ Empty AI response", type: "chat" },
+          ]);
+        } catch (err) {
+          console.error("❌ AI API error:", err);
+          setMessages((prev) => [
+            ...prev,
+            { sender: "ai", text: "⚠️ AI API error: could not fetch response" },
+          ]);
+        }
       }
     } catch (error) {
+      console.error("❌ Unexpected sendMessage error:", error);
       setMessages((prev) => [
         ...prev,
-        { sender: "ai", text: "⚠️ Error: could not reach AI or search API" },
+        { sender: "ai", text: "⚠️ Unexpected error in sendMessage()" },
       ]);
     }
   };
 
-  // 🚀 Prevent hydration mismatch
-  if (!isMounted) {
-    return <p className="p-6">Loading editor...</p>;
-  }
-
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen bg-black text-white">
       {/* Editor Section */}
-      <div className="flex-1 p-6 relative">
+      <div className="flex-1 p-4">
         <h1 className="text-2xl font-bold mb-4">Collaborative Editor</h1>
-        <div className="relative border rounded-lg p-4 h-[80vh] overflow-y-auto">
-          <EditorContent editor={editor} />
-          <FloatingToolbar editor={editor} onEditWithAI={handleEditWithAI} />
-        </div>
+        <TiptapEditor onReady={setEditor} />
+        <FloatingToolbar editor={editor} />
       </div>
 
       {/* Chat Sidebar */}
-      <div className="w-80 border-l p-4 bg-white flex flex-col">
-        <h2 className="text-xl font-semibold mb-2 text-gray-800">AI Chat</h2>
-        <div className="flex-1 border rounded p-2 mb-4 overflow-y-auto bg-gray-50">
+      <div className="w-1/3 bg-white text-black flex flex-col border-l">
+        <h2 className="text-lg font-bold p-2">AI Chat</h2>
+        <div className="flex-1 overflow-y-auto p-2 space-y-2">
           {messages.map((msg, i) => (
-            <p
+            <div
               key={i}
-              className={`mb-2 ${
+              className={`p-2 rounded ${
                 msg.sender === "user"
-                  ? "text-blue-700"
-                  : msg.type === "search"
-                  ? "text-gray-900 bg-yellow-100 px-2 py-1 rounded"
-                  : "text-gray-800 bg-green-100 px-2 py-1 rounded"
+                  ? "text-blue-600 font-bold"
+                  : "bg-green-100 text-black"
               }`}
             >
-              <strong>{msg.sender}:</strong> {msg.text}
-            </p>
+              <span className="font-semibold">{msg.sender}:</span> {msg.text}
+            </div>
           ))}
         </div>
-        <div className="flex">
+        <div className="p-2 flex border-t">
           <input
-            type="text"
-            placeholder="Type a message..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="flex-1 border rounded-l px-2 py-1 text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            placeholder="Type a message..."
+            className="flex-1 border p-2 rounded-l text-black"
           />
           <button
             onClick={sendMessage}
-            className="bg-blue-500 text-white px-4 rounded-r hover:bg-blue-600"
+            className="bg-blue-500 text-white px-4 rounded-r"
           >
             Send
           </button>
