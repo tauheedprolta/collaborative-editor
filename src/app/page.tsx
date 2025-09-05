@@ -3,7 +3,8 @@
 import { useState } from "react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEditor, EditorContent } from "@tiptap/react";
-import FloatingToolbar from "./components/FloatingToolbar";
+import Editor from "../components/Editor";
+import FloatingToolbar from "../components/FloatingToolbar";
 
 export default function Home() {
   const [messages, setMessages] = useState<
