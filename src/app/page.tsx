@@ -3,12 +3,12 @@
 import { useState } from "react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEditor, EditorContent } from "@tiptap/react";
-import Editor from "./components/Editor";
-import FloatingToolbar from "./components/floatingtoolbar";
-
+import FloatingToolbar from "./components/FloatingToolbar";
 
 export default function Home() {
-  const [messages, setMessages] = useState<{ sender: string; text: string; type?: string }[]>([]);
+  const [messages, setMessages] = useState<
+    { sender: string; text: string; type?: string }[]
+  >([]);
   const [input, setInput] = useState("");
 
   // ✅ Initialize TipTap editor
@@ -18,7 +18,28 @@ export default function Home() {
     immediatelyRender: false,
   });
 
-  // ✅ Send message handler
+  // ✅ AI edit handler (for FloatingToolbar)
+  const handleEditWithAI = async (selectedText: string): Promise<string> => {
+    if (!selectedText.trim()) return "";
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: `Please improve this text: "${selectedText}"`,
+        }),
+      });
+
+      const data = await res.json();
+      return data.reply || selectedText;
+    } catch (error) {
+      console.error("AI edit error:", error);
+      return selectedText;
+    }
+  };
+
+  // ✅ Send message handler (chat + search + AI)
   const sendMessage = async () => {
     if (!input.trim()) return;
 
@@ -27,82 +48,63 @@ export default function Home() {
     setInput("");
 
     try {
-      // Detect search queries
+      // 🔎 If user asks to search
       if (
         userMessage.toLowerCase().includes("find") ||
         userMessage.toLowerCase().includes("search")
       ) {
-        try {
-          const res = await fetch("/api/search", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: userMessage }),
-          });
+        const res = await fetch("/api/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: userMessage }),
+        });
 
-          const data = await res.json();
-          console.log("🔎 Search API response:", data);
+        const data = await res.json();
+        setMessages((prev) => [
+          ...prev,
+          { sender: "ai", text: `🔎 Web Search Result: ${data.result}`, type: "search" },
+        ]);
 
-          setMessages((prev) => [
-            ...prev,
-            { sender: "ai", text: `🔎 Web Search Result: ${data.result}`, type: "search" },
-          ]);
-
-          // Insert into editor
-          editor?.commands.insertContent(
-            `<p><strong>🔎 Web Search Result:</strong> ${data.result}</p>`
-          );
-        } catch (err) {
-          console.error("❌ Search API error:", err);
-          setMessages((prev) => [
-            ...prev,
-            { sender: "ai", text: "⚠️ Search API error: could not fetch results" },
-          ]);
-        }
+        editor?.commands.insertContent(
+          `<p><strong>🔎 Web Search Result:</strong> ${data.result}</p>`
+        );
       } else {
-        // Normal AI chat
-        try {
-          const res = await fetch("/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: userMessage }),
-          });
+        // 🤖 Normal AI chat
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: userMessage }),
+        });
 
-          const data = await res.json();
-          console.log("🤖 AI API response:", data);
-
-          setMessages((prev) => [
-            ...prev,
-            { sender: "ai", text: data.reply || "⚠️ Empty AI response", type: "chat" },
-          ]);
-        } catch (err) {
-          console.error("❌ AI API error:", err);
-          setMessages((prev) => [
-            ...prev,
-            { sender: "ai", text: "⚠️ AI API error: could not fetch response" },
-          ]);
-        }
+        const data = await res.json();
+        setMessages((prev) => [
+          ...prev,
+          { sender: "ai", text: data.reply || "⚠️ Empty AI response", type: "chat" },
+        ]);
       }
-    } catch (error) {
-      console.error("❌ Unexpected sendMessage error:", error);
+    } catch (err) {
+      console.error("❌ sendMessage error:", err);
       setMessages((prev) => [
         ...prev,
-        { sender: "ai", text: "⚠️ Unexpected error in sendMessage()" },
+        { sender: "ai", text: "⚠️ Error: could not fetch response" },
       ]);
     }
   };
 
   return (
     <div className="flex h-screen bg-black text-white">
-      {/* Editor Section */}
+      {/* 📝 Editor Section */}
       <div className="flex-1 p-4">
         <h1 className="text-2xl font-bold mb-4">Collaborative Editor</h1>
-        <div className="border rounded p-2 h-[80vh] overflow-y-auto bg-white text-black">
+        <div className="border rounded p-2 h-[80vh] overflow-y-auto bg-white text-black relative">
           <EditorContent editor={editor} />
+          {editor && (
+            <FloatingToolbar editor={editor} onEditWithAI={handleEditWithAI} />
+          )}
         </div>
-        <FloatingToolbar editor={editor} />
       </div>
 
-      {/* Chat Sidebar */}
+      {/* 💬 Chat Sidebar */}
       <div className="w-1/3 bg-white text-black flex flex-col border-l">
         <h2 className="text-lg font-bold p-2">AI Chat</h2>
         <div className="flex-1 overflow-y-auto p-2 space-y-2">
