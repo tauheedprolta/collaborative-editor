@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import StarterKit from "@tiptap/starter-kit";
 import { useEditor, EditorContent } from "@tiptap/react";
 import Editor from "./components/Editor";
 import FloatingToolbar from "./components/floatingtoolbar";
