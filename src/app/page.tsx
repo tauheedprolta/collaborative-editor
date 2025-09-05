@@ -1,18 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import dynamic from "next/dynamic";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
 import FloatingToolbar from "./components/FloatingToolbar";
-
-// Dynamically import TipTap editor (client-side only)
-const TiptapEditor = dynamic(() => import("./components/Editor"), { ssr: false });
 
 export default function Home() {
   const [messages, setMessages] = useState<{ sender: string; text: string; type?: string }[]>([]);
   const [input, setInput] = useState("");
-  const [editor, setEditor] = useState<any>(null);
 
-  // Send message handler
+  // ✅ Initialize TipTap editor
+  const editor = useEditor({
+    extensions: [StarterKit],
+    content: "<p>Start writing here...</p>",
+    immediatelyRender: false,
+  });
+
+  // ✅ Send message handler
   const sendMessage = async () => {
     if (!input.trim()) return;
 
@@ -90,7 +94,9 @@ export default function Home() {
       {/* Editor Section */}
       <div className="flex-1 p-4">
         <h1 className="text-2xl font-bold mb-4">Collaborative Editor</h1>
-        <TiptapEditor onReady={setEditor} />
+        <div className="border rounded p-2 h-[80vh] overflow-y-auto bg-white text-black">
+          <EditorContent editor={editor} />
+        </div>
         <FloatingToolbar editor={editor} />
       </div>
 
